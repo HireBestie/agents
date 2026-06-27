@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "operatorSummary": "Regional HVAC installer serving residential retrofits in the US Midwest.",
+  "assumptions": [
+    "Financing terms decide our quote win rate this quarter",
+    "Copper input costs stay flat through Q3"
+  ],
+  "principles": [
+    "Compete on total cost of ownership, not sticker price",
+    "Act on confirmed local competitor moves"
+  ],
+  "sources": [
+    {
+      "id": "source-1",
+      "kind": "rss",
+      "url": "https://feeds.bbci.co.uk/news/rss.xml",
+      "label": "feeds.bbci.co.uk",
+      "status": "active"
+    }
+  ],
+  "cadence": {
+    "label": "Daily watch",
+    "frequency": "daily",
+    "hourUtc": 7,
+    "dayOfWeekUtc": 1
+  },
+  "escalationPolicy": "threat_and_opportunity",
+  "sinceHours": 48,
+  "delivery": {
+    "email": "operator@example.com"
+  }
+}

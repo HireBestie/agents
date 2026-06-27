@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "operatorSummary": "Regional HVAC installer serving residential retrofits in the US Midwest. Competes on installed price and financing terms against two regional chains.",
+  "assumptions": [
+    "Financing terms decide our quote win rate this quarter",
+    "Copper input costs stay flat through Q3",
+    "Local competitor A will not expand service territory before fall"
+  ],
+  "principles": [
+    "Compete on total cost of ownership, not sticker price",
+    "Act on confirmed local competitor moves within 48 hours",
+    "Do not chase commodity noise without a local mechanism"
+  ],
+  "sources": [
+    {
+      "id": "pme-rss-trade",
+      "kind": "rss",
+      "url": "https://feeds.bbci.co.uk/news/rss.xml",
+      "label": "Public news probe feed",
+      "status": "active"
+    },
+    {
+      "id": "pme-website-competitor",
+      "kind": "website",
+      "url": "https://example.com",
+      "label": "Competitor homepage watch",
+      "status": "active"
+    }
+  ],
+  "cadence": {
+    "label": "Daily watch",
+    "frequency": "daily",
+    "hourUtc": 7,
+    "dayOfWeekUtc": 1
+  },
+  "escalationPolicy": "threat_and_opportunity",
+  "sinceHours": 48,
+  "delivery": {
+    "email": "operator@example.com"
+  }
+}

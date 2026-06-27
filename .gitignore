@@ -1,0 +1,6 @@
+market-radar/node_modules/
+market-radar/.next/
+market-radar/.data/
+market-radar/tsconfig.tsbuildinfo
+market-radar/.env
+market-radar/.env.local

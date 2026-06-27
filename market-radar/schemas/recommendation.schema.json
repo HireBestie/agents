@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hirebestie.com/schemas/market-radar/recommendation.v1.json",
+  "title": "MarketRadarRecommendation",
+  "type": "object",
+  "required": ["action", "rationale"],
+  "properties": {
+    "action": {
+      "enum": ["brief", "investigate", "simulate", "snooze", "ignore"]
+    },
+    "rationale": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}
