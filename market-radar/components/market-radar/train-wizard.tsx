@@ -1,24 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-  Loader2Icon,
-  SparklesIcon,
-  Wand2Icon,
-} from "lucide-react";
+import { useState } from "react";
+import { Loader2Icon, SparklesIcon } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BestieInterviewChat } from "@/components/market-radar/bestie-interview-chat";
 import { CoveragePanel } from "@/components/market-radar/coverage-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
-import { PAIN_INTERVIEW_QUESTIONS } from "@/lib/elicit-compile";
-import {
-  assessPainCoverage,
-} from "@/lib/pain-coverage";
+import { PAIN_INTERVIEW_QUESTIONS } from "@/lib/pain-interview-questions";
+import { assessPainCoverage } from "@/lib/pain-coverage";
 import {
   BestieSeedV1Schema,
   bestieSeedToRunRequest,
@@ -58,21 +52,14 @@ export function TrainWizard({
   const [message, setMessage] = useState<string | null>(null);
   const [requesting, setRequesting] = useState<string | null>(null);
 
-  const interviewProgress = useMemo(() => {
-    const filled = PAIN_INTERVIEW_QUESTIONS.filter((q) =>
-      answers[q.id]?.trim(),
-    ).length;
-    return (filled / PAIN_INTERVIEW_QUESTIONS.length) * 100;
-  }, [answers]);
-
   async function handleCompile() {
-    const payload = PAIN_INTERVIEW_QUESTIONS.map((q) => ({
-      questionId: q.id,
-      answer: answers[q.id]?.trim() ?? "",
-    })).filter((a) => a.answer);
+    const payload = PAIN_INTERVIEW_QUESTIONS.map((question) => ({
+      questionId: question.id,
+      answer: answers[question.id]?.trim() ?? "",
+    })).filter((answer) => answer.answer);
 
-    if (payload.length < 3) {
-      setError("Answer at least three questions so Bestie can compile your watch.");
+    if (payload.length === 0) {
+      setError("Complete the interview before compiling your watch plan.");
       return;
     }
 
@@ -100,9 +87,9 @@ export function TrainWizard({
       setSourceBacklog(data.sourceBacklog ?? []);
       setNeedsSourceApproval(Boolean(data.needsSourceApproval));
       setPhase("review");
-      setMessage("Bestie translated your pain into a watch plan — review and edit.");
+      setMessage("Bestie translated the interview into a watch plan - review and edit.");
     } catch {
-      setError("Could not compile — check AI connection.");
+      setError("Could not compile - check AI connection.");
     } finally {
       setCompiling(false);
     }
@@ -127,21 +114,25 @@ export function TrainWizard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bestieSeed: confirmed, confirm: true }),
       });
-      const data = (await response.json()) as { error?: string; bestieSeed?: BestieSeedV1 };
+      const data = (await response.json()) as {
+        error?: string;
+        bestieSeed?: BestieSeedV1;
+      };
       if (data.error) {
         setError(data.error);
         return;
       }
+
       const savedSeed = data.bestieSeed ?? confirmed;
       setSeed(savedSeed);
       onComplete();
       setPhase("run");
       setRunning(true);
-      const runPayload = bestieSeedToRunRequest(savedSeed);
+
       const runResponse = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(runPayload),
+        body: JSON.stringify(bestieSeedToRunRequest(savedSeed)),
       });
       const runData = (await runResponse.json()) as {
         error?: string;
@@ -151,11 +142,10 @@ export function TrainWizard({
         setError(runData.error);
         return;
       }
-      const emailed = runData.deliveries?.find((d) => d.channel === "email")?.ok;
+
+      const emailed = runData.deliveries?.find((delivery) => delivery.channel === "email")?.ok;
       setMessage(
-        emailed ?
-          "Scan complete — digest sent."
-        : "Scan complete — open Digest to review.",
+        emailed ? "Scan complete - digest sent." : "Scan complete - open Digest to review.",
       );
       onRunComplete();
     } catch {
@@ -171,7 +161,7 @@ export function TrainWizard({
     setError(null);
     try {
       const email = seed?.deliverySeed.destinations.find(
-        (d) => d.kind === "email",
+        (destination) => destination.kind === "email",
       )?.target;
       const response = await fetch("/api/coverage/request", {
         method: "POST",
@@ -206,7 +196,7 @@ export function TrainWizard({
 
   function updateAssumption(index: number, statement: string) {
     if (!seed) return;
-    const next = { ...seed };
+    const next = structuredClone(seed);
     next.worldModelSeed.assumptions[index] = {
       ...next.worldModelSeed.assumptions[index]!,
       statement,
@@ -217,11 +207,25 @@ export function TrainWizard({
 
   function updatePrinciple(index: number, statement: string) {
     if (!seed) return;
-    const next = { ...seed };
+    const next = structuredClone(seed);
     next.worldviewSeed.principles[index] = {
       ...next.worldviewSeed.principles[index]!,
       statement,
     };
+    setSeed(next);
+    setCoverage(assessPainCoverage(next));
+  }
+
+  function updateDigestEmail(value: string) {
+    if (!seed) return;
+    const next = structuredClone(seed);
+    const destination = next.deliverySeed.destinations.find(
+      (item) => item.kind === "email",
+    );
+    if (destination) {
+      destination.target = value;
+      destination.status = value.trim() ? "active" : "request_support";
+    }
     setSeed(next);
     setCoverage(assessPainCoverage(next));
   }
@@ -232,50 +236,23 @@ export function TrainWizard({
         <p className="label-arena">Train Bestie</p>
         <h2 className="font-display text-3xl font-semibold">
           {phase === "interview"
-            ? "Stop finding out too late."
+            ? "Interview your Market Radar Bestie."
             : phase === "review"
               ? "Review your compiled watch"
               : "Running first scan"}
         </h2>
         <p className="text-muted-foreground font-body-serif">
-          Ask in your language. Bestie persists assumptions, principles, sources, and
-          monitors.
+          You speak in plain language. Bestie compiles assumptions, principles,
+          sources, monitors, and coverage.
         </p>
       </header>
 
       {phase === "interview" ? (
-        <>
-          <Progress value={interviewProgress} />
-          <div className="space-y-5">
-            {PAIN_INTERVIEW_QUESTIONS.map((q) => (
-              <div key={q.id} className="card-editorial p-5 space-y-2">
-                <Label htmlFor={q.id}>{q.prompt}</Label>
-                <p className="text-xs text-muted-foreground">{q.hint}</p>
-                <Textarea
-                  id={q.id}
-                  value={answers[q.id] ?? ""}
-                  onChange={(e) =>
-                    setAnswers({ ...answers, [q.id]: e.target.value })
-                  }
-                  className="min-h-20"
-                />
-              </div>
-            ))}
-          </div>
-          <Button size="lg" onClick={handleCompile} disabled={compiling}>
-            {compiling ? (
-              <>
-                <Loader2Icon className="size-4 animate-spin" />
-                Compiling…
-              </>
-            ) : (
-              <>
-                <Wand2Icon className="size-4" />
-                Compile my watch
-              </>
-            )}
-          </Button>
-        </>
+        <BestieInterviewChat
+          onAnswersChange={setAnswers}
+          onCompile={handleCompile}
+          compiling={compiling}
+        />
       ) : null}
 
       {phase === "review" && seed && coverage ? (
@@ -283,15 +260,17 @@ export function TrainWizard({
           <div className="space-y-6">
             <section className="card-editorial p-5 space-y-4">
               <p className="label-arena">Proposed assumptions</p>
-              {seed.worldModelSeed.assumptions.map((a, i) => (
-                <div key={a.id}>
+              {seed.worldModelSeed.assumptions.map((assumption, index) => (
+                <div key={assumption.id}>
                   <Textarea
-                    value={a.statement}
-                    onChange={(e) => updateAssumption(i, e.target.value)}
+                    value={assumption.statement}
+                    onChange={(event) => updateAssumption(index, event.target.value)}
                     className="font-data text-sm"
                   />
-                  {a.rationale ? (
-                    <p className="mt-1 text-xs text-muted-foreground">{a.rationale}</p>
+                  {assumption.rationale ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {assumption.rationale}
+                    </p>
                   ) : null}
                 </div>
               ))}
@@ -299,11 +278,11 @@ export function TrainWizard({
 
             <section className="card-editorial p-5 space-y-4">
               <p className="label-arena">Proposed principles</p>
-              {seed.worldviewSeed.principles.map((p, i) => (
-                <div key={p.id}>
+              {seed.worldviewSeed.principles.map((principle, index) => (
+                <div key={principle.id}>
                   <Textarea
-                    value={p.statement}
-                    onChange={(e) => updatePrinciple(i, e.target.value)}
+                    value={principle.statement}
+                    onChange={(event) => updatePrinciple(index, event.target.value)}
                     className="font-data text-sm"
                   />
                 </div>
@@ -314,19 +293,18 @@ export function TrainWizard({
               <p className="label-arena">Sources</p>
               {seed.sourceSeed.sources.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No active sources yet — add competitor or industry URLs before
-                  confirming.
+                  No active sources yet - add competitor or industry URLs before confirming.
                 </p>
               ) : null}
-              {seed.sourceSeed.sources.map((s) => (
+              {seed.sourceSeed.sources.map((source) => (
                 <div
-                  key={s.id}
+                  key={source.id}
                   className="flex flex-wrap items-center gap-2 text-sm"
                 >
-                  <Badge variant="watching">{s.kind}</Badge>
-                  <span>{s.label}</span>
-                  <span className="font-data text-xs text-muted-foreground truncate">
-                    {s.url}
+                  <Badge variant="watching">{source.kind}</Badge>
+                  <span>{source.label}</span>
+                  <span className="truncate font-data text-xs text-muted-foreground">
+                    {source.url}
                   </span>
                 </div>
               ))}
@@ -355,27 +333,16 @@ export function TrainWizard({
               ) : null}
             </section>
 
-            <section className="card-editorial p-5 space-y-2">
+            <section className="card-editorial space-y-2 p-5">
               <Label htmlFor="email">Digest email</Label>
               <Input
                 id="email"
                 type="email"
                 value={
-                  seed.deliverySeed.destinations.find((d) => d.kind === "email")
+                  seed.deliverySeed.destinations.find((item) => item.kind === "email")
                     ?.target ?? ""
                 }
-                onChange={(e) => {
-                  const next = structuredClone(seed);
-                  const dest = next.deliverySeed.destinations.find(
-                    (d) => d.kind === "email",
-                  );
-                  if (dest) {
-                    dest.target = e.target.value;
-                    dest.status = e.target.value.trim() ? "active" : "request_support";
-                  }
-                  setSeed(next);
-                  setCoverage(assessPainCoverage(next));
-                }}
+                onChange={(event) => updateDigestEmail(event.target.value)}
               />
             </section>
 
@@ -387,12 +354,12 @@ export function TrainWizard({
               {saving || running ? (
                 <>
                   <Loader2Icon className="size-4 animate-spin" />
-                  {running ? "Scanning…" : "Saving…"}
+                  {running ? "Scanning..." : "Saving..."}
                 </>
               ) : (
                 <>
                   <SparklesIcon className="size-4" />
-                  Confirm & run first scan
+                  Confirm and run first scan
                 </>
               )}
             </Button>

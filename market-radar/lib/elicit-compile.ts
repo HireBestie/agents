@@ -13,10 +13,12 @@ import {
 import { assessPainCoverage } from "./pain-coverage";
 import { isDatabaseConfigured } from "./db/client";
 import { EXECUTABLE_SOURCE_KINDS } from "./monitor-config";
+import { PAIN_INTERVIEW_QUESTIONS } from "./pain-interview-questions";
 
 const ExecutableKindSchema = z.enum(EXECUTABLE_SOURCE_KINDS);
 
-export const PAIN_INTERVIEW_QUESTIONS = [
+/*
+const LEGACY_PAIN_INTERVIEW_QUESTIONS_FOR_REMOVAL = [
   {
     id: "too_late",
     prompt: "What do you usually find out too late?",
@@ -54,6 +56,7 @@ export const PAIN_INTERVIEW_QUESTIONS = [
     defaultPainIds: ["cant_translate_to_action", "saw_but_froze"] as const,
   },
 ] as const;
+*/
 
 const AnswerPainMappingSchema = z.object({
   questionId: z.string().min(1),

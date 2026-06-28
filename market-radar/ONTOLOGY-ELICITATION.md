@@ -46,8 +46,13 @@ operatorSummary  // legacy v1 only — migrate to elicitationContext.summary
 ## Compiler flow
 
 ```text
-pain-language answers
-  → POST /api/elicit/compile
+pain-language chat (AI SDK 7)
+  → POST /api/chat (single turn)
+  → model calls updateInterviewState tool (forced on step 0 via prepareStep)
+  → MarketRadarInterviewState (missing | partial | complete | skipped per slot)
+  → model streams follow-up text using active slot + nextQuestion
+  → optional readyToCompile terminal tool when canCompile
+  → when readyToCompile and canCompile → POST /api/elicit/compile
   → BestieSeedV1 (draft IDs) + PainCoverageAssessmentV1 + sourceBacklog
   → user reviews / edits
   → POST /api/config { bestieSeed, confirm: true }
@@ -55,6 +60,8 @@ pain-language answers
   → bestieSeedToMonitorConfig(seed)  // runtime flatten (legacy projection)
   → existing scan/digest pipeline
 ```
+
+Interview slots (`pain`, `escalation`, `manualChecks`, `sources`, `delivery`, `actionPolicy`) are evaluated structurally after every answer via the `updateInterviewState` tool inside `/api/chat`. Vague replies stay `partial` with explicit `missing[]` clarifications. Compile unlocks only when required slots are `complete` or `skipped` **and** Bestie calls the terminal `readyToCompile` tool — the UI trusts tool output and message metadata, not assistant prose.
 
 ## Seed authority (v0.5.1+)
 
