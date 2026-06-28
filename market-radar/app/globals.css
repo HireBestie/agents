@@ -1,35 +1,179 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-pitch-exhibit: var(--pitch-exhibit);
+  --color-pitch-exhibit-bg: var(--pitch-exhibit-bg);
+  --color-pitch-exhibit-border: var(--pitch-exhibit-border);
+  --color-pitch-claim: var(--pitch-claim);
+  --color-pitch-claim-bg: var(--pitch-claim-bg);
+  --color-pitch-claim-border: var(--pitch-claim-border);
+  --color-pitch-warrant: var(--pitch-warrant);
+  --color-pitch-warrant-bg: var(--pitch-warrant-bg);
+  --color-pitch-warrant-border: var(--pitch-warrant-border);
+  --color-pitch-chain: var(--pitch-chain);
+  --color-pitch-chain-bg: var(--pitch-chain-bg);
+  --color-pitch-chain-border: var(--pitch-chain-border);
+  --color-pitch-rebuttal: var(--pitch-rebuttal);
+  --color-pitch-rebuttal-bg: var(--pitch-rebuttal-bg);
+  --color-pitch-rebuttal-border: var(--pitch-rebuttal-border);
+  --color-arena-risk-high: var(--arena-risk-high);
+  --color-arena-risk-medium: var(--arena-risk-medium);
+  --color-arena-risk-low: var(--arena-risk-low);
+  --color-arena-yes: var(--arena-yes);
+  --color-arena-no: var(--arena-no);
+  --radius-sm: calc(var(--radius) - 0.75rem);
+  --radius-md: calc(var(--radius) - 0.5rem);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 0.25rem);
+  --font-display: var(--font-fraunces);
+  --font-body-serif: var(--font-newsreader);
+  --font-data: var(--font-dm-mono);
+}
+
 :root {
-  color-scheme: light;
-  --bg: #fff8ea;
-  --ink: #1f1b15;
-  --muted: #5d5448;
-  --accent: #c2693c;
-  --border: rgba(31, 27, 21, 0.2);
+  --font-fraunces: "Fraunces", ui-serif, Georgia, serif;
+  --font-newsreader: "Newsreader", ui-serif, Georgia, serif;
+  --font-dm-mono: "DM Mono", "Courier New", monospace;
+
+  --background: oklch(0.96 0.01 260);
+  --foreground: oklch(0.15 0.02 260);
+  --card: oklch(0.98 0.005 260);
+  --card-foreground: oklch(0.15 0.02 260);
+  --popover: oklch(0.99 0.002 260);
+  --popover-foreground: oklch(0.15 0.02 260);
+  --primary: oklch(0.72 0.18 75);
+  --primary-foreground: oklch(0.15 0.02 260);
+  --secondary: oklch(0.92 0.01 260);
+  --secondary-foreground: oklch(0.25 0.02 260);
+  --muted: oklch(0.94 0.01 240);
+  --muted-foreground: oklch(0.5 0.02 260);
+  --accent: oklch(0.95 0.02 240);
+  --accent-foreground: oklch(0.2 0.05 260);
+  --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.85 0.02 260);
+  --input: oklch(0.9 0.02 260);
+  --ring: oklch(0.72 0.18 75);
+  --radius: 1.25rem;
+
+  --pitch-claim: oklch(0.62 0.16 75);
+  --pitch-claim-bg: oklch(0.97 0.015 75);
+  --pitch-claim-border: oklch(0.78 0.12 75 / 0.35);
+  --pitch-warrant: oklch(0.45 0.12 230);
+  --pitch-warrant-bg: oklch(0.96 0.018 230);
+  --pitch-warrant-border: oklch(0.65 0.08 230 / 0.3);
+  --pitch-exhibit: oklch(0.42 0.02 260);
+  --pitch-exhibit-bg: oklch(0.95 0.01 260);
+  --pitch-exhibit-border: oklch(0.72 0.015 260 / 0.4);
+  --pitch-rebuttal: oklch(0.56 0.15 55);
+  --pitch-rebuttal-bg: oklch(0.97 0.025 70);
+  --pitch-rebuttal-border: oklch(0.72 0.12 65 / 0.35);
+  --pitch-chain: oklch(0.5 0.12 280);
+  --pitch-chain-bg: oklch(0.96 0.018 280);
+  --pitch-chain-border: oklch(0.68 0.07 280 / 0.3);
+
+  --arena-risk-high: oklch(0.55 0.2 25);
+  --arena-risk-medium: oklch(0.62 0.16 75);
+  --arena-risk-low: oklch(0.55 0.15 154);
+  --arena-yes: oklch(0.58 0.17 154);
+  --arena-no: oklch(0.58 0.2 25);
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    @apply bg-background text-foreground antialiased;
+    min-height: 100%;
+    margin: 0;
+  }
+
+  body {
+    font-family: var(--font-newsreader), ui-serif, Georgia, serif;
+    line-height: 1.55;
+  }
 }
 
-html,
-body {
-  margin: 0;
-  min-height: 100%;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
-  line-height: 1.5;
+.font-display {
+  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
 }
 
-a {
-  color: var(--accent);
+.font-body-serif {
+  font-family: var(--font-newsreader), ui-serif, Georgia, serif;
 }
 
-button {
-  cursor: pointer;
+.font-data {
+  font-family: var(--font-dm-mono), "Courier New", monospace;
 }
 
-textarea,
-input {
-  font: inherit;
+.label-arena {
+  font-family: var(--font-dm-mono), "Courier New", monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--muted-foreground);
+  line-height: 1;
+}
+
+.card-editorial {
+  @apply rounded-[var(--radius)] border border-border bg-card;
+}
+
+.pitch-chip-exhibit {
+  @apply border border-pitch-exhibit-border bg-pitch-exhibit-bg text-pitch-exhibit;
+}
+
+.pitch-chip-claim {
+  @apply border border-pitch-claim-border bg-pitch-claim-bg text-pitch-claim;
+}
+
+.pitch-chip-warrant {
+  @apply border border-pitch-warrant-border bg-pitch-warrant-bg text-pitch-warrant;
+}
+
+.pitch-chip-chain {
+  @apply border border-pitch-chain-border bg-pitch-chain-bg text-pitch-chain;
+}
+
+.pitch-chip-rebuttal {
+  @apply border border-pitch-rebuttal-border bg-pitch-rebuttal-bg text-pitch-rebuttal;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out both;
 }

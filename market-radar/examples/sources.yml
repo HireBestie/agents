@@ -1,0 +1,32 @@
+# Market Radar Source Template
+#
+# Use public sources only. Replace example URLs with real feeds, public pages,
+# competitor pages, regulator pages, procurement pages, or trade publications.
+
+sources:
+  - id: local-business-news
+    kind: rss
+    url: "https://example.com/local-business/rss.xml"
+    reason: "Local business moves can reveal competitor openings or customer demand shifts."
+
+  - id: competitor-homepage
+    kind: website
+    url: "https://competitor.example.com"
+    reason: "Competitor homepage changes can reveal territory, pricing, or offer changes."
+
+  - id: trade-association
+    kind: website
+    url: "https://association.example.com/news"
+    reason: "Trade association updates can reveal regulation, rebates, and supply-chain shifts."
+
+  - id: public-procurement
+    kind: website
+    url: "https://procurement.example.gov"
+    reason: "Public tender feeds can reveal large demand signals."
+
+requested_sources:
+  - kind: google_news
+    reason: "Useful for broader news coverage, but not part of the basic self-host adapter."
+  - kind: regulatory_feed
+    reason: "Useful for compliance-heavy sectors; request managed support if needed."
+
