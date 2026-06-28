@@ -1,13 +1,22 @@
 import { isDatabaseConfigured } from "./db/client";
 import {
   persistCompleteMonitorRun,
+  readMonitorBundleFromDb,
   readLatestDigestFromDb,
-  readMonitorConfigFromDb,
+  writeBestieSeedToDb,
   writeMonitorConfigToDb,
 } from "./db/monitor-store";
 import type { MarketRadarDigestOutput } from "./digest";
 import type { MarketRadarRunOutcome } from "./lite-schema";
 import type { MarketRadarMonitorConfig } from "./monitor-config";
+import {
+  BestieSeedV1Schema,
+  bestieSeedToMonitorConfig,
+  monitorConfigToBestieSeed,
+  resolveAuthoritativeMonitorBundle,
+  type AuthoritativeMonitorBundle,
+  type BestieSeedV1,
+} from "./ontology-seed";
 import type { FetchedObservation } from "./sources/types";
 import * as fileStorage from "./storage-file";
 
@@ -19,22 +28,64 @@ function requireProductionPersistence(): void {
   }
 }
 
-export async function readMonitorConfig(): Promise<MarketRadarMonitorConfig | null> {
+/** Seed-first bundle read — see ontology-seed.ts seed authority convention. */
+export async function readAuthoritativeMonitorBundle(): Promise<AuthoritativeMonitorBundle | null> {
   if (isDatabaseConfigured()) {
-    return readMonitorConfigFromDb();
+    const bundle = await readMonitorBundleFromDb();
+    if (!bundle) return null;
+    return resolveAuthoritativeMonitorBundle({
+      legacyConfig: bundle.bestieSeed ? null : bundle.config,
+      bestieSeed: bundle.bestieSeed,
+    });
   }
-  return fileStorage.readMonitorConfig();
+
+  const [bestieSeed, legacyConfig] = await Promise.all([
+    fileStorage.readBestieSeed(),
+    fileStorage.readMonitorConfig(),
+  ]);
+
+  return resolveAuthoritativeMonitorBundle({ legacyConfig, bestieSeed });
+}
+
+export async function readMonitorConfig(): Promise<MarketRadarMonitorConfig | null> {
+  const bundle = await readAuthoritativeMonitorBundle();
+  return bundle?.config ?? null;
+}
+
+export async function readBestieSeed(): Promise<BestieSeedV1 | null> {
+  const bundle = await readAuthoritativeMonitorBundle();
+  return bundle?.bestieSeed ?? null;
 }
 
 export async function writeMonitorConfig(
   config: MarketRadarMonitorConfig,
 ): Promise<void> {
   requireProductionPersistence();
+
+  const existing = await readBestieSeed();
+  if (existing) {
+    throw new Error(
+      "bestie_seed is authoritative — POST { bestieSeed } instead of legacy config.",
+    );
+  }
+
+  const seed = monitorConfigToBestieSeed(config);
   if (isDatabaseConfigured()) {
-    await writeMonitorConfigToDb(config);
+    await writeMonitorConfigToDb(config, seed);
     return;
   }
-  await fileStorage.writeMonitorConfig(config);
+  await fileStorage.writeBestieSeed(seed, bestieSeedToMonitorConfig(seed));
+}
+
+export async function writeBestieSeed(seed: BestieSeedV1): Promise<MarketRadarMonitorConfig> {
+  const parsed = BestieSeedV1Schema.parse(seed);
+  const config = bestieSeedToMonitorConfig(parsed);
+  requireProductionPersistence();
+  if (isDatabaseConfigured()) {
+    return writeBestieSeedToDb(parsed);
+  }
+  await fileStorage.writeBestieSeed(parsed, config);
+  return config;
 }
 
 export async function readLatestDigest(): Promise<MarketRadarDigestOutput | null> {

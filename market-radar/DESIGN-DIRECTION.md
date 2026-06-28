@@ -302,7 +302,7 @@ Target feeling: *I can do this.* Not: *I need to understand your architecture.*
 | Current deployable UI (replace) | `deployable/app/page.tsx`, `deployable/app/globals.css` |
 | Public repo | https://github.com/HireBestie/agents/tree/main/market-radar |
 | Production deploy | https://market-radar-bestie.vercel.app |
-| Managed upsell | `https://hirebestie.com/agents/market-radar?utm_source=deploy_app` |
+| Managed upsell | `https://hirebestie.com/deploy?agent=market-radar&utm_source=deploy_app` |
 
 ---
 

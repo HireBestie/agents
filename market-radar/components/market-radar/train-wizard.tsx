@@ -1,532 +1,410 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Loader2Icon,
-  PlusIcon,
   SparklesIcon,
-  Trash2Icon,
   Wand2Icon,
 } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { CoveragePanel } from "@/components/market-radar/coverage-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { WIZARD_STEPS } from "@/lib/constants";
+import { PAIN_INTERVIEW_QUESTIONS } from "@/lib/elicit-compile";
 import {
-  buildConfigPayload,
-  linesToList,
-  listToLines,
-  type MonitorFormState,
-  type SourceEntry,
-} from "@/lib/monitor-form";
+  assessPainCoverage,
+} from "@/lib/pain-coverage";
+import {
+  BestieSeedV1Schema,
+  bestieSeedToRunRequest,
+  confirmBestieSeed,
+  hasRelevantActiveSources,
+  type BestieSeedV1,
+  type PainCoverageAssessmentV1,
+} from "@/lib/ontology-seed";
 
-const MANAGED_CHANNELS = [
-  { name: "Slack", status: "Available in managed" },
-  { name: "Telegram", status: "Coming soon" },
-  { name: "WhatsApp", status: "Request support" },
-];
+type Phase = "interview" | "review" | "run";
 
 type TrainWizardProps = {
-  form: MonitorFormState;
-  onChange: (form: MonitorFormState) => void;
   onComplete: () => void;
   onRunComplete: () => void;
+  initialSeed?: BestieSeedV1 | null;
 };
 
 export function TrainWizard({
-  form,
-  onChange,
   onComplete,
   onRunComplete,
+  initialSeed,
 }: TrainWizardProps) {
-  const [step, setStep] = useState(1);
+  const [phase, setPhase] = useState<Phase>(initialSeed ? "review" : "interview");
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [seed, setSeed] = useState<BestieSeedV1 | null>(initialSeed ?? null);
+  const [coverage, setCoverage] = useState<PainCoverageAssessmentV1 | null>(
+    initialSeed ? assessPainCoverage(initialSeed) : null,
+  );
+  const [sourceBacklog, setSourceBacklog] = useState<
+    Array<{ kind: string; detail: string; rationale?: string }>
+  >([]);
+  const [needsSourceApproval, setNeedsSourceApproval] = useState(false);
+  const [compiling, setCompiling] = useState(false);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
-  const [suggesting, setSuggesting] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [addSourceOpen, setAddSourceOpen] = useState(false);
-  const [newSource, setNewSource] = useState<{
-    kind: SourceEntry["kind"];
-    url: string;
-  }>({ kind: "rss", url: "" });
-  const [requestOpen, setRequestOpen] = useState(false);
-  const [requestKind, setRequestKind] = useState("");
-  const [requestDetail, setRequestDetail] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState<string | null>(null);
 
-  const progress = (step / WIZARD_STEPS.length) * 100;
-  const current = WIZARD_STEPS[step - 1];
+  const interviewProgress = useMemo(() => {
+    const filled = PAIN_INTERVIEW_QUESTIONS.filter((q) =>
+      answers[q.id]?.trim(),
+    ).length;
+    return (filled / PAIN_INTERVIEW_QUESTIONS.length) * 100;
+  }, [answers]);
 
-  function patch(partial: Partial<MonitorFormState>) {
-    onChange({ ...form, ...partial });
+  async function handleCompile() {
+    const payload = PAIN_INTERVIEW_QUESTIONS.map((q) => ({
+      questionId: q.id,
+      answer: answers[q.id]?.trim() ?? "",
+    })).filter((a) => a.answer);
+
+    if (payload.length < 3) {
+      setError("Answer at least three questions so Bestie can compile your watch.");
+      return;
+    }
+
+    setCompiling(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/elicit/compile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: payload }),
+      });
+      const data = (await response.json()) as {
+        seed?: BestieSeedV1;
+        coverage?: PainCoverageAssessmentV1;
+        sourceBacklog?: Array<{ kind: string; detail: string; rationale?: string }>;
+        needsSourceApproval?: boolean;
+        error?: string;
+      };
+      if (data.error || !data.seed) {
+        setError(data.error ?? "Compile failed.");
+        return;
+      }
+      setSeed(data.seed);
+      setCoverage(data.coverage ?? assessPainCoverage(data.seed));
+      setSourceBacklog(data.sourceBacklog ?? []);
+      setNeedsSourceApproval(Boolean(data.needsSourceApproval));
+      setPhase("review");
+      setMessage("Bestie translated your pain into a watch plan — review and edit.");
+    } catch {
+      setError("Could not compile — check AI connection.");
+    } finally {
+      setCompiling(false);
+    }
   }
 
-  async function saveConfig(): Promise<boolean> {
+  async function handleSaveAndRun() {
+    if (!seed) return;
+
+    if (!hasRelevantActiveSources(seed)) {
+      setError(
+        "Add at least one relevant watch source before running. Generic probe feeds are not auto-added.",
+      );
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
-      const payload = buildConfigPayload(form);
+      const confirmed = confirmBestieSeed(BestieSeedV1Schema.parse(seed));
       const response = await fetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ bestieSeed: confirmed, confirm: true }),
       });
-      const data = (await response.json()) as { error?: string };
-      if (data.error) {
-        setError(data.error);
-        return false;
-      }
-      return true;
-    } catch {
-      setError("Could not save — check your connection.");
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleContinue() {
-    if (step === 1 && !form.operatorSummary.trim()) {
-      setError("Tell Bestie what business to watch.");
-      return;
-    }
-    if (step === 2 && form.assumptions.filter(Boolean).length === 0) {
-      setError("Add at least one assumption.");
-      return;
-    }
-    if (step === 3 && form.principles.filter(Boolean).length === 0) {
-      setError("Add at least one principle.");
-      return;
-    }
-    if (step === 4 && form.sources.length === 0) {
-      setError("Add at least one source.");
-      return;
-    }
-
-    const ok = await saveConfig();
-    if (!ok) return;
-
-    if (step < WIZARD_STEPS.length) {
-      setStep(step + 1);
-      setMessage(null);
-      setError(null);
-    }
-  }
-
-  async function handleSuggestSources() {
-    setSuggesting(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/sources/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          operatorSummary: form.operatorSummary,
-          assumptions: form.assumptions,
-          principles: form.principles,
-        }),
-      });
-      const data = (await response.json()) as {
-        executableSources?: SourceEntry[];
-        backlogRequests?: Array<{ kind: string; detail: string }>;
-        error?: string;
-      };
+      const data = (await response.json()) as { error?: string; bestieSeed?: BestieSeedV1 };
       if (data.error) {
         setError(data.error);
         return;
       }
-      if (data.executableSources?.length) {
-        patch({ sources: data.executableSources });
-        const backlog = data.backlogRequests?.length ?? 0;
-        setMessage(
-          `Suggested ${data.executableSources.length} sources${backlog ? ` · ${backlog} queued for support` : ""}.`,
-        );
-      }
-    } catch {
-      setError("Could not suggest sources right now.");
-    } finally {
-      setSuggesting(false);
-    }
-  }
-
-  async function handleRunScan() {
-    setRunning(true);
-    setError(null);
-    setMessage(null);
-    const saved = await saveConfig();
-    if (!saved) {
-      setRunning(false);
-      return;
-    }
-
-    try {
-      const payload = buildConfigPayload(form);
-      const response = await fetch("/api/run", {
+      const savedSeed = data.bestieSeed ?? confirmed;
+      setSeed(savedSeed);
+      onComplete();
+      setPhase("run");
+      setRunning(true);
+      const runPayload = bestieSeedToRunRequest(savedSeed);
+      const runResponse = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          operatorSummary: payload.operatorSummary,
-          assumptions: payload.assumptions,
-          principles: payload.principles,
-          sourceRegistry: payload.sources,
-          sinceHours: 48,
-        }),
+        body: JSON.stringify(runPayload),
       });
-      const data = (await response.json()) as {
+      const runData = (await runResponse.json()) as {
         error?: string;
-        digest?: unknown;
         deliveries?: Array<{ channel: string; ok: boolean }>;
       };
-      if (data.error) {
-        setError(data.error);
+      if (runData.error) {
+        setError(runData.error);
         return;
       }
-      const emailed = data.deliveries?.find((d) => d.channel === "email")?.ok;
+      const emailed = runData.deliveries?.find((d) => d.channel === "email")?.ok;
       setMessage(
         emailed ?
-          "Scan complete — digest sent to your inbox."
+          "Scan complete — digest sent."
         : "Scan complete — open Digest to review.",
       );
-      onComplete();
       onRunComplete();
     } catch {
-      setError("Scan failed — try again in a moment.");
+      setError("Save or scan failed.");
     } finally {
+      setSaving(false);
       setRunning(false);
     }
   }
 
-  function addSource() {
-    if (!newSource.url.trim()) return;
-    let label = newSource.url;
+  async function handleCoverageRequest(painId: string, capability: string) {
+    setRequesting(`${painId}:${capability}`);
+    setError(null);
     try {
-      label = new URL(newSource.url).hostname;
-    } catch {
-      /* keep raw */
-    }
-    patch({
-      sources: [
-        ...form.sources,
-        {
-          id: `source-${Date.now()}`,
-          kind: newSource.kind,
-          url: newSource.url.trim(),
-          label,
-          status: "active",
-        },
-      ],
-    });
-    setNewSource({ kind: "rss", url: "" });
-    setAddSourceOpen(false);
-  }
-
-  async function submitSourceRequest() {
-    if (!requestKind.trim() || !requestDetail.trim()) return;
-    try {
-      const response = await fetch("/api/sources/request", {
+      const email = seed?.deliverySeed.destinations.find(
+        (d) => d.kind === "email",
+      )?.target;
+      const response = await fetch("/api/coverage/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          requestedKind: requestKind.trim(),
-          requestedDetail: requestDetail.trim(),
+          painId,
+          requestedCapability: capability,
+          contactEmail: email,
+          context: { phase: "onboarding_review" },
         }),
       });
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as {
+        error?: string;
+        status?: "recorded" | "upvoted";
+        requestCount?: number;
+      };
       if (data.error) {
         setError(data.error);
         return;
       }
-      setMessage("Request logged — we'll prioritize adapter support.");
-      setRequestOpen(false);
-      setRequestKind("");
-      setRequestDetail("");
+      setMessage(
+        data.status === "upvoted" ?
+          `Request upvoted${data.requestCount ? ` (${data.requestCount} total)` : ""} - this helps us prioritize coverage.`
+        : "Request recorded - this helps us prioritize coverage.",
+      );
     } catch {
-      setError("Could not submit request.");
+      setError("Could not record request.");
+    } finally {
+      setRequesting(null);
     }
+  }
+
+  function updateAssumption(index: number, statement: string) {
+    if (!seed) return;
+    const next = { ...seed };
+    next.worldModelSeed.assumptions[index] = {
+      ...next.worldModelSeed.assumptions[index]!,
+      statement,
+    };
+    setSeed(next);
+    setCoverage(assessPainCoverage(next));
+  }
+
+  function updatePrinciple(index: number, statement: string) {
+    if (!seed) return;
+    const next = { ...seed };
+    next.worldviewSeed.principles[index] = {
+      ...next.worldviewSeed.principles[index]!,
+      statement,
+    };
+    setSeed(next);
+    setCoverage(assessPainCoverage(next));
   }
 
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <p className="label-arena">
-          Train Bestie · Step {step} of {WIZARD_STEPS.length}
+        <p className="label-arena">Train Bestie</p>
+        <h2 className="font-display text-3xl font-semibold">
+          {phase === "interview"
+            ? "Stop finding out too late."
+            : phase === "review"
+              ? "Review your compiled watch"
+              : "Running first scan"}
+        </h2>
+        <p className="text-muted-foreground font-body-serif">
+          Ask in your language. Bestie persists assumptions, principles, sources, and
+          monitors.
         </p>
-        <h2 className="font-display text-3xl font-semibold">{current.prompt}</h2>
-        {step === 2 ? (
-          <p className="text-muted-foreground font-body-serif">
-            Write beliefs that would change a decision if they moved.
-          </p>
-        ) : null}
-        {step === 3 ? (
-          <p className="text-muted-foreground font-body-serif">
-            Principles are decision rules, not values posters.
-          </p>
-        ) : null}
       </header>
 
-      <Progress value={progress} />
-
-      <div className="card-editorial p-6">
-        {step === 1 ? (
-          <div className="space-y-2">
-            <Label htmlFor="business">Business context</Label>
-            <Textarea
-              id="business"
-              className="min-h-32"
-              value={form.operatorSummary}
-              onChange={(e) => patch({ operatorSummary: e.target.value })}
-              placeholder="Who you serve, what market you compete in, what decisions Bestie should protect…"
-            />
+      {phase === "interview" ? (
+        <>
+          <Progress value={interviewProgress} />
+          <div className="space-y-5">
+            {PAIN_INTERVIEW_QUESTIONS.map((q) => (
+              <div key={q.id} className="card-editorial p-5 space-y-2">
+                <Label htmlFor={q.id}>{q.prompt}</Label>
+                <p className="text-xs text-muted-foreground">{q.hint}</p>
+                <Textarea
+                  id={q.id}
+                  value={answers[q.id] ?? ""}
+                  onChange={(e) =>
+                    setAnswers({ ...answers, [q.id]: e.target.value })
+                  }
+                  className="min-h-20"
+                />
+              </div>
+            ))}
           </div>
-        ) : null}
+          <Button size="lg" onClick={handleCompile} disabled={compiling}>
+            {compiling ? (
+              <>
+                <Loader2Icon className="size-4 animate-spin" />
+                Compiling…
+              </>
+            ) : (
+              <>
+                <Wand2Icon className="size-4" />
+                Compile my watch
+              </>
+            )}
+          </Button>
+        </>
+      ) : null}
 
-        {step === 2 ? (
-          <div className="space-y-2">
-            <Label htmlFor="assumptions">Assumptions (one per line)</Label>
-            <Textarea
-              id="assumptions"
-              className="min-h-36 font-data text-sm"
-              value={listToLines(form.assumptions)}
-              onChange={(e) => patch({ assumptions: linesToList(e.target.value) })}
-            />
-          </div>
-        ) : null}
-
-        {step === 3 ? (
-          <div className="space-y-2">
-            <Label htmlFor="principles">Principles (one per line)</Label>
-            <Textarea
-              id="principles"
-              className="min-h-36 font-data text-sm"
-              value={listToLines(form.principles)}
-              onChange={(e) => patch({ principles: linesToList(e.target.value) })}
-            />
-          </div>
-        ) : null}
-
-        {step === 4 ? (
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {form.sources.map((source) => (
-                <div
-                  key={source.id}
-                  className="flex items-center gap-2 rounded-sm border border-border bg-background px-3 py-2"
-                >
-                  <Badge variant="watching">{source.kind}</Badge>
-                  <span className="text-sm">{source.label}</span>
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() =>
-                      patch({
-                        sources: form.sources.filter((s) => s.id !== source.id),
-                      })
-                    }
-                    aria-label={`Remove ${source.label}`}
-                  >
-                    <Trash2Icon className="size-3.5" />
-                  </button>
+      {phase === "review" && seed && coverage ? (
+        <div className="grid gap-8 lg:grid-cols-2">
+          <div className="space-y-6">
+            <section className="card-editorial p-5 space-y-4">
+              <p className="label-arena">Proposed assumptions</p>
+              {seed.worldModelSeed.assumptions.map((a, i) => (
+                <div key={a.id}>
+                  <Textarea
+                    value={a.statement}
+                    onChange={(e) => updateAssumption(i, e.target.value)}
+                    className="font-data text-sm"
+                  />
+                  {a.rationale ? (
+                    <p className="mt-1 text-xs text-muted-foreground">{a.rationale}</p>
+                  ) : null}
                 </div>
               ))}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Dialog open={addSourceOpen} onOpenChange={setAddSourceOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <PlusIcon className="size-4" />
-                    Add source
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add a watch source</DialogTitle>
-                    <DialogDescription>
-                      RSS feed, website homepage, or sitemap URL.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Kind</Label>
-                      <Select
-                        value={newSource.kind}
-                        onValueChange={(v) =>
-                          setNewSource({
-                            ...newSource,
-                            kind: v as SourceEntry["kind"],
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="rss">RSS feed</SelectItem>
-                          <SelectItem value="website">Website</SelectItem>
-                          <SelectItem value="sitemap">Sitemap</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>URL</Label>
-                      <Input
-                        value={newSource.url}
-                        onChange={(e) =>
-                          setNewSource({ ...newSource, url: e.target.value })
-                        }
-                        placeholder="https://…"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button onClick={addSource}>Add</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+            </section>
 
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleSuggestSources}
-                disabled={suggesting}
-              >
-                {suggesting ? (
-                  <Loader2Icon className="size-4 animate-spin" />
-                ) : (
-                  <Wand2Icon className="size-4" />
-                )}
-                Suggest sources
-              </Button>
+            <section className="card-editorial p-5 space-y-4">
+              <p className="label-arena">Proposed principles</p>
+              {seed.worldviewSeed.principles.map((p, i) => (
+                <div key={p.id}>
+                  <Textarea
+                    value={p.statement}
+                    onChange={(e) => updatePrinciple(i, e.target.value)}
+                    className="font-data text-sm"
+                  />
+                </div>
+              ))}
+            </section>
 
-              <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    Request unsupported source
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Request a source type</DialogTitle>
-                    <DialogDescription>
-                      Tender feeds, regulatory portals, search queries — tell us what you need.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Source type</Label>
-                      <Input
-                        value={requestKind}
-                        onChange={(e) => setRequestKind(e.target.value)}
-                        placeholder="e.g. regulatory_feed"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Details</Label>
-                      <Textarea
-                        value={requestDetail}
-                        onChange={(e) => setRequestDetail(e.target.value)}
-                        placeholder="URL or description…"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button onClick={submitSourceRequest}>Submit request</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </div>
-        ) : null}
+            <section className="card-editorial p-5 space-y-3">
+              <p className="label-arena">Sources</p>
+              {seed.sourceSeed.sources.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No active sources yet — add competitor or industry URLs before
+                  confirming.
+                </p>
+              ) : null}
+              {seed.sourceSeed.sources.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex flex-wrap items-center gap-2 text-sm"
+                >
+                  <Badge variant="watching">{s.kind}</Badge>
+                  <span>{s.label}</span>
+                  <span className="font-data text-xs text-muted-foreground truncate">
+                    {s.url}
+                  </span>
+                </div>
+              ))}
+              {sourceBacklog.length > 0 ? (
+                <div className="space-y-2 border-t border-border pt-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Suggested sources to approve
+                  </p>
+                  {sourceBacklog.map((item) => (
+                    <p key={`${item.kind}:${item.detail}`} className="text-xs">
+                      <Badge variant="outline" className="mr-2">
+                        {item.kind}
+                      </Badge>
+                      {item.detail}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+              {needsSourceApproval ? (
+                <Alert>
+                  <AlertDescription>
+                    Coverage stays partial until you add relevant watch sources.
+                    Bestie will not auto-add generic news feeds.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+            </section>
 
-        {step === 5 ? (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email digest</Label>
+            <section className="card-editorial p-5 space-y-2">
+              <Label htmlFor="email">Digest email</Label>
               <Input
                 id="email"
                 type="email"
-                value={form.deliveryEmail}
-                onChange={(e) => patch({ deliveryEmail: e.target.value })}
-                placeholder="you@company.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Cadence</Label>
-              <Select
-                value={form.cadenceFrequency}
-                onValueChange={(v) =>
-                  patch({
-                    cadenceFrequency: v as MonitorFormState["cadenceFrequency"],
-                  })
+                value={
+                  seed.deliverySeed.destinations.find((d) => d.kind === "email")
+                    ?.target ?? ""
                 }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">Daily morning brief · 07:00 UTC</SelectItem>
-                  <SelectItem value="weekly">Weekly · Monday 07:00 UTC</SelectItem>
-                  <SelectItem value="manual">Manual — scan on demand</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 rounded-sm border border-border bg-muted/40 p-4">
-              <p className="label-arena">Other channels</p>
-              {MANAGED_CHANNELS.map((ch) => (
-                <div
-                  key={ch.name}
-                  className="flex items-center justify-between py-1 text-sm"
-                >
-                  <span>{ch.name}</span>
-                  <Badge variant="outline">{ch.status}</Badge>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
+                onChange={(e) => {
+                  const next = structuredClone(seed);
+                  const dest = next.deliverySeed.destinations.find(
+                    (d) => d.kind === "email",
+                  );
+                  if (dest) {
+                    dest.target = e.target.value;
+                    dest.status = e.target.value.trim() ? "active" : "request_support";
+                  }
+                  setSeed(next);
+                  setCoverage(assessPainCoverage(next));
+                }}
+              />
+            </section>
 
-        {step === 6 ? (
-          <div className="space-y-4 text-center">
-            <p className="font-body-serif text-muted-foreground">
-              Bestie will scan your sources, rank signals against your assumptions,
-              and prepare a digest with recommended actions.
-            </p>
-            <Button size="lg" onClick={handleRunScan} disabled={running || saving}>
-              {running ? (
+            <Button
+              size="lg"
+              onClick={handleSaveAndRun}
+              disabled={saving || running || !hasRelevantActiveSources(seed)}
+            >
+              {saving || running ? (
                 <>
                   <Loader2Icon className="size-4 animate-spin" />
-                  Scanning…
+                  {running ? "Scanning…" : "Saving…"}
                 </>
               ) : (
                 <>
                   <SparklesIcon className="size-4" />
-                  Run first scan
+                  Confirm & run first scan
                 </>
               )}
             </Button>
           </div>
-        ) : null}
-      </div>
+
+          <CoveragePanel
+            coverage={coverage}
+            onRequest={handleCoverageRequest}
+            requesting={requesting}
+          />
+        </div>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">
@@ -537,28 +415,6 @@ export function TrainWizard({
         <Alert variant="success">
           <AlertDescription>{message}</AlertDescription>
         </Alert>
-      ) : null}
-
-      {step < 6 ? (
-        <div className="flex justify-between gap-3">
-          <Button
-            variant="ghost"
-            disabled={step === 1 || saving}
-            onClick={() => setStep(step - 1)}
-          >
-            Back
-          </Button>
-          <Button onClick={handleContinue} disabled={saving}>
-            {saving ? (
-              <>
-                <Loader2Icon className="size-4 animate-spin" />
-                Saving…
-              </>
-            ) : (
-              "Continue"
-            )}
-          </Button>
-        </div>
       ) : null}
     </div>
   );

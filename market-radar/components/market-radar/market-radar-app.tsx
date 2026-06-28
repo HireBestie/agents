@@ -18,13 +18,8 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import {
-  DEFAULT_ASSUMPTIONS,
-  DEFAULT_BUSINESS,
-  DEFAULT_PRINCIPLES,
-  DEFAULT_SOURCES,
-} from "@/lib/constants";
-import type { DeployStatus, DigestItem, MonitorFormState } from "@/lib/monitor-form";
+import type { DeployStatus, DigestItem } from "@/lib/monitor-form";
+import type { BestieSeedV1 } from "@/lib/ontology-seed";
 import type { WatchRoomSnapshot } from "@/lib/db/watch-store";
 
 type DigestPayload = {
@@ -39,6 +34,7 @@ export function MarketRadarApp() {
   const [status, setStatus] = useState<DeployStatus | null>(null);
   const [watch, setWatch] = useState<WatchRoomSnapshot | null>(null);
   const [watchConfigured, setWatchConfigured] = useState(false);
+  const [bestieSeed, setBestieSeed] = useState<BestieSeedV1 | null>(null);
   const [digest, setDigest] = useState<DigestPayload | null>(null);
   const [digestMarkdown, setDigestMarkdown] = useState<string | null>(null);
   const [deliveries, setDeliveries] = useState<
@@ -46,15 +42,6 @@ export function MarketRadarApp() {
   >();
   const [loadingDigest, setLoadingDigest] = useState(true);
   const [loadingWatch, setLoadingWatch] = useState(true);
-
-  const [form, setForm] = useState<MonitorFormState>({
-    operatorSummary: DEFAULT_BUSINESS,
-    assumptions: DEFAULT_ASSUMPTIONS,
-    principles: DEFAULT_PRINCIPLES,
-    sources: DEFAULT_SOURCES,
-    deliveryEmail: "",
-    cadenceFrequency: "daily",
-  });
 
   const refreshStatus = useCallback(async () => {
     const response = await fetch("/api/status");
@@ -95,24 +82,10 @@ export function MarketRadarApp() {
   const loadConfig = useCallback(async () => {
     const response = await fetch("/api/config");
     const data = (await response.json()) as {
-      config?: {
-        operatorSummary: string;
-        assumptions: string[];
-        principles: string[];
-        sources: MonitorFormState["sources"];
-        delivery?: { email?: string };
-        cadence?: { frequency: MonitorFormState["cadenceFrequency"] };
-      };
+      bestieSeed?: BestieSeedV1 | null;
     };
-    if (data.config) {
-      setForm({
-        operatorSummary: data.config.operatorSummary,
-        assumptions: data.config.assumptions,
-        principles: data.config.principles,
-        sources: data.config.sources as MonitorFormState["sources"],
-        deliveryEmail: data.config.delivery?.email ?? "",
-        cadenceFrequency: data.config.cadence?.frequency ?? "daily",
-      });
+    if (data.bestieSeed) {
+      setBestieSeed(data.bestieSeed);
     }
   }, []);
 
@@ -133,13 +106,14 @@ export function MarketRadarApp() {
     void refreshDigest();
     void refreshWatch();
     void refreshStatus();
+    void loadConfig();
     setTab("digest");
   }
 
   return (
     <TooltipProvider>
       <div className="min-h-screen">
-        <div className="mx-auto max-w-4xl px-5 py-8 md:py-12">
+        <div className="mx-auto max-w-5xl px-5 py-8 md:py-12">
           <div className="mb-8 flex items-center justify-end">
             <Sheet>
               <SheetTrigger asChild>
@@ -172,10 +146,9 @@ export function MarketRadarApp() {
                     <strong className="text-foreground">RESEND_API_KEY</strong> +{" "}
                     MARKET_RADAR_FROM_EMAIL — email delivery
                   </p>
-                  <p>
-                    <strong className="text-foreground">MARKET_RADAR_RUN_TOKEN</strong> —
-                    optional run auth
-                  </p>
+                  {bestieSeed ? (
+                    <p className="text-arena-yes">Bestie seed saved (v0.5)</p>
+                  ) : null}
                   {status?.onVercel ? (
                     <p className="text-arena-yes">Running on Vercel</p>
                   ) : (
@@ -200,11 +173,11 @@ export function MarketRadarApp() {
 
             <TabsContent value="train">
               <TrainWizard
-                form={form}
-                onChange={setForm}
+                initialSeed={bestieSeed}
                 onComplete={() => {
                   void refreshWatch();
                   void refreshStatus();
+                  void loadConfig();
                 }}
                 onRunComplete={handleRunComplete}
               />

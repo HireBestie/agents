@@ -1,5 +1,5 @@
 export const MANAGED_URL =
-  "https://hirebestie.com/agents/market-radar?utm_source=deploy_app&utm_medium=upsell&utm_campaign=market_radar_deploy";
+  "https://hirebestie.com/deploy?agent=market-radar&utm_source=deploy_app&utm_medium=upsell&utm_campaign=market_radar_deploy";
 
 export const DEPLOY_YOUR_OWN_URL =
   "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhirebestie%2Fagents&project-name=market-radar-bestie&root-directory=market-radar&integration-ids=neon";

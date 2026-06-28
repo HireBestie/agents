@@ -1,5 +1,5 @@
 import { isDatabaseConfigured, getPool } from "./db/client";
-import { readMonitorConfig } from "./persistence";
+import { readBestieSeed, readMonitorConfig } from "./persistence";
 
 export type ConnectionCheckId = "ai" | "memory" | "schedule" | "email";
 
@@ -55,6 +55,7 @@ export async function getDeployStatus() {
     Boolean(process.env.MARKET_RADAR_FROM_EMAIL?.trim());
 
   const config = await readMonitorConfig().catch(() => null);
+  const seed = await readBestieSeed().catch(() => null);
 
   const checks: ConnectionCheck[] = [
     {
@@ -112,7 +113,9 @@ export async function getDeployStatus() {
   ];
 
   const infraReady = checks.every((check) => check.connected);
-  const trainingComplete = Boolean(config?.operatorSummary && config.sources.length);
+  const trainingComplete = Boolean(
+    seed?.worldModelSeed.assumptions.length || (config?.operatorSummary && config.sources.length),
+  );
 
   return {
     checks,

@@ -83,4 +83,23 @@ CREATE INDEX IF NOT EXISTS monitor_runs_config_started_idx
 
 CREATE INDEX IF NOT EXISTS source_requests_status_created_idx
   ON source_requests (status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS coverage_requests (
+  id TEXT PRIMARY KEY,
+  pain_id TEXT NOT NULL,
+  requested_capability TEXT NOT NULL,
+  context JSONB,
+  contact_email TEXT,
+  request_count INTEGER NOT NULL DEFAULT 1,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS coverage_requests_pain_created_idx
+  ON coverage_requests (pain_id, created_at DESC);
+
+ALTER TABLE coverage_requests ADD COLUMN IF NOT EXISTS request_count INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE coverage_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE monitor_configs ADD COLUMN IF NOT EXISTS bestie_seed JSONB;
 `.trim();

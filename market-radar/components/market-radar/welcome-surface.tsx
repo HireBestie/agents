@@ -71,11 +71,11 @@ export function WelcomeSurface({
       <header className="space-y-3">
         <p className="label-arena">Market Radar Bestie</p>
         <h1 className="font-display text-4xl font-semibold leading-tight tracking-tight md:text-5xl">
-          Your market-watch employee is live.
+          Stop finding out too late.
         </h1>
         <p className="max-w-2xl text-lg text-muted-foreground font-body-serif">
-          Bestie reads public sources through your assumptions and principles,
-          then reports only what would change a decision.
+          Bestie asks in your language, compiles assumptions and principles, and
+          reports only what would change a decision.
         </p>
       </header>
 

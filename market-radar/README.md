@@ -78,7 +78,7 @@ Managed Bestie adds:
 - action receipts
 - Brief, Investigate, Simulate, and Snooze loops
 
-[Hire managed Market Radar](https://hirebestie.com/agents/market-radar?utm_source=ep03&utm_medium=deploy_readme&utm_campaign=market_radar_deploy)
+[Hire managed Market Radar](https://hirebestie.com/deploy?agent=market-radar&utm_source=ep03&utm_medium=deploy_readme&utm_campaign=market_radar_deploy)
 
 ## What Is An Assumption?
 
@@ -119,4 +119,3 @@ Weak:
 - The free skill does not remember prior runs.
 
 Generated from `monorepo/packages/agent-templates`.
-

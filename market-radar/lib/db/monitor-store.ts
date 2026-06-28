@@ -3,10 +3,14 @@ import type { PoolClient } from "@neondatabase/serverless";
 
 import type { MarketRadarDigestOutput } from "../digest";
 import type { MarketRadarLiteItem, MarketRadarRunOutcome } from "../lite-schema";
-import type {
-  MarketRadarMonitorConfig,
-  SourceRegistryEntry,
-} from "../monitor-config";
+import type { MarketRadarMonitorConfig, SourceRegistryEntry } from "../monitor-config";
+import {
+  BestieSeedV1Schema,
+  bestieSeedToMonitorConfig,
+  monitorConfigToBestieSeed,
+  resolveAuthoritativeMonitorBundle,
+  type BestieSeedV1,
+} from "../ontology-seed";
 import { getPool } from "./client";
 import { ensureSchema } from "./migrate";
 import { withTransaction } from "./transaction";
@@ -43,14 +47,44 @@ function rowToConfig(row: {
 }
 
 export async function readMonitorConfigFromDb(): Promise<MarketRadarMonitorConfig | null> {
+  const bundle = await readMonitorBundleFromDb();
+  return bundle?.config ?? null;
+}
+
+export async function readBestieSeedFromDb(): Promise<BestieSeedV1 | null> {
+  const bundle = await readMonitorBundleFromDb();
+  return bundle?.bestieSeed ?? null;
+}
+
+export async function readMonitorBundleFromDb(): Promise<{
+  config: MarketRadarMonitorConfig;
+  bestieSeed: BestieSeedV1 | null;
+} | null> {
   await ensureSchema();
   const pool = getPool();
   const configResult = await pool.query(
-    `SELECT operator_summary, assumptions, principles, cadence, escalation_policy, since_hours, delivery
+    `SELECT operator_summary, assumptions, principles, cadence, escalation_policy, since_hours, delivery, bestie_seed
      FROM monitor_configs WHERE id = $1`,
     [DEFAULT_CONFIG_ID],
   );
   if (configResult.rowCount === 0) return null;
+
+  const row = configResult.rows[0];
+  const rawSeed = row.bestie_seed;
+  const parsedSeed =
+    rawSeed ? BestieSeedV1Schema.safeParse(rawSeed).data ?? null : null;
+
+  if (parsedSeed) {
+    const authoritative = resolveAuthoritativeMonitorBundle({
+      legacyConfig: null,
+      bestieSeed: parsedSeed,
+    });
+    if (!authoritative) return null;
+    return {
+      config: authoritative.config,
+      bestieSeed: authoritative.bestieSeed,
+    };
+  }
 
   const sourcesResult = await pool.query(
     `SELECT id, kind, url, label, status
@@ -60,18 +94,28 @@ export async function readMonitorConfigFromDb(): Promise<MarketRadarMonitorConfi
     [DEFAULT_CONFIG_ID],
   );
 
-  const base = rowToConfig(configResult.rows[0]);
-  const sources: SourceRegistryEntry[] = sourcesResult.rows.map((row) => ({
-    id: row.id as string,
-    kind: row.kind as SourceRegistryEntry["kind"],
-    url: row.url as string,
-    label: row.label as string,
-    status: row.status as SourceRegistryEntry["status"],
+  const base = rowToConfig(row);
+  const sources: SourceRegistryEntry[] = sourcesResult.rows.map((sourceRow) => ({
+    id: sourceRow.id as string,
+    kind: sourceRow.kind as SourceRegistryEntry["kind"],
+    url: sourceRow.url as string,
+    label: sourceRow.label as string,
+    status: sourceRow.status as SourceRegistryEntry["status"],
   }));
 
   if (sources.length === 0) return null;
 
-  return { ...base, sources };
+  const legacyConfig = { ...base, sources };
+  const authoritative = resolveAuthoritativeMonitorBundle({
+    legacyConfig,
+    bestieSeed: null,
+  });
+  if (!authoritative) return null;
+
+  return {
+    config: authoritative.config,
+    bestieSeed: authoritative.bestieSeed,
+  };
 }
 
 async function replaceMonitorSources(
@@ -100,15 +144,20 @@ async function replaceMonitorSources(
 
 export async function writeMonitorConfigToDb(
   config: MarketRadarMonitorConfig,
+  bestieSeed?: BestieSeedV1 | null,
 ): Promise<void> {
   await ensureSchema();
+
+  // Legacy-only writes still project a seed so future reads stay seed-first.
+  const seed = bestieSeed ?? monitorConfigToBestieSeed(config);
+  const projected = bestieSeedToMonitorConfig(seed);
 
   await withTransaction(async (client) => {
     await client.query(
       `INSERT INTO monitor_configs (
         id, operator_summary, assumptions, principles, cadence,
-        escalation_policy, since_hours, delivery, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
+        escalation_policy, since_hours, delivery, bestie_seed, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
       ON CONFLICT (id) DO UPDATE SET
         operator_summary = EXCLUDED.operator_summary,
         assumptions = EXCLUDED.assumptions,
@@ -117,21 +166,29 @@ export async function writeMonitorConfigToDb(
         escalation_policy = EXCLUDED.escalation_policy,
         since_hours = EXCLUDED.since_hours,
         delivery = EXCLUDED.delivery,
+        bestie_seed = EXCLUDED.bestie_seed,
         updated_at = now()`,
       [
         DEFAULT_CONFIG_ID,
-        config.operatorSummary,
-        JSON.stringify(config.assumptions),
-        JSON.stringify(config.principles),
-        JSON.stringify(config.cadence),
-        config.escalationPolicy,
-        config.sinceHours,
-        JSON.stringify(config.delivery ?? {}),
+        projected.operatorSummary,
+        JSON.stringify(projected.assumptions),
+        JSON.stringify(projected.principles),
+        JSON.stringify(projected.cadence),
+        projected.escalationPolicy,
+        projected.sinceHours,
+        JSON.stringify(projected.delivery ?? {}),
+        JSON.stringify(seed),
       ],
     );
 
-    await replaceMonitorSources(client, config.sources);
+    await replaceMonitorSources(client, projected.sources);
   });
+}
+
+export async function writeBestieSeedToDb(seed: BestieSeedV1): Promise<MarketRadarMonitorConfig> {
+  const config = bestieSeedToMonitorConfig(seed);
+  await writeMonitorConfigToDb(config, seed);
+  return config;
 }
 
 export async function persistCompleteMonitorRun(input: {
