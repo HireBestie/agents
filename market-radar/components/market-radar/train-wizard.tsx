@@ -4,15 +4,17 @@ import { useState } from "react";
 import { Loader2Icon, SparklesIcon } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BestieInterviewChat } from "@/components/market-radar/bestie-interview-chat";
 import { CoveragePanel } from "@/components/market-radar/coverage-panel";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { FtueStepper } from "@/components/market-radar/ftue-stepper";
+import {
+  canLaunchFirstScan,
+  WatchPlanReview,
+} from "@/components/market-radar/watch-plan-review";
 import { PAIN_INTERVIEW_QUESTIONS } from "@/lib/pain-interview-questions";
 import { assessPainCoverage } from "@/lib/pain-coverage";
+import type { DeployStatus } from "@/lib/monitor-form";
 import {
   BestieSeedV1Schema,
   bestieSeedToRunRequest,
@@ -28,12 +30,14 @@ type TrainWizardProps = {
   onComplete: () => void;
   onRunComplete: () => void;
   initialSeed?: BestieSeedV1 | null;
+  deployStatus?: DeployStatus | null;
 };
 
 export function TrainWizard({
   onComplete,
   onRunComplete,
   initialSeed,
+  deployStatus = null,
 }: TrainWizardProps) {
   const [phase, setPhase] = useState<Phase>(initialSeed ? "review" : "interview");
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -98,9 +102,15 @@ export function TrainWizard({
   async function handleSaveAndRun() {
     if (!seed) return;
 
-    if (!hasRelevantActiveSources(seed)) {
+    if (!canLaunchFirstScan(seed, deployStatus)) {
+      if (!hasRelevantActiveSources(seed)) {
+        setError(
+          "Add at least one relevant watch source before running. Generic probe feeds are not auto-added.",
+        );
+        return;
+      }
       setError(
-        "Add at least one relevant watch source before running. Generic probe feeds are not auto-added.",
+        "Connect AI, memory, and schedule on Welcome before your first scan.",
       );
       return;
     }
@@ -145,7 +155,9 @@ export function TrainWizard({
 
       const emailed = runData.deliveries?.find((delivery) => delivery.channel === "email")?.ok;
       setMessage(
-        emailed ? "Scan complete - digest sent." : "Scan complete - open Digest to review.",
+        emailed
+          ? "Scan complete. Digest sent to your inbox."
+          : "Scan complete. Open Digest to review your web digest.",
       );
       onRunComplete();
     } catch {
@@ -230,21 +242,68 @@ export function TrainWizard({
     setCoverage(assessPainCoverage(next));
   }
 
+  const launchReady = seed ? canLaunchFirstScan(seed, deployStatus) : false;
+
   return (
     <div className="space-y-6">
-      <header className="space-y-2">
-        <p className="label-arena">Train Bestie</p>
-        <h2 className="font-display text-3xl font-semibold">
-          {phase === "interview"
-            ? "Interview your Market Radar Bestie."
-            : phase === "review"
-              ? "Review your compiled watch"
-              : "Running first scan"}
-        </h2>
-        <p className="text-muted-foreground font-body-serif">
-          You speak in plain language. Bestie compiles assumptions, principles,
-          sources, monitors, and coverage.
-        </p>
+      <header className="space-y-4">
+        <div className="space-y-2">
+          <p className="label-arena">Train Bestie</p>
+          <h2 className="font-display text-3xl font-semibold">
+            {phase === "interview"
+              ? "Interview your Market Radar Bestie."
+              : phase === "review"
+                ? "Approve your watch plan"
+                : "Running first scan"}
+          </h2>
+          <p className="text-muted-foreground font-body-serif">
+            {phase === "interview"
+              ? "Speak in plain language. Bestie updates slot state through tools after each reply."
+              : phase === "review"
+                ? "Bestie compiled your brief into a watch plan. Edit anything, then launch."
+                : "Bestie is scanning your sources now."}
+          </p>
+        </div>
+        <FtueStepper
+          steps={[
+            {
+              id: "connections",
+              title: "Connection readiness",
+              status:
+                deployStatus?.infraReady ? "complete" : "upcoming",
+            },
+            {
+              id: "interview",
+              title: "Interview Bestie",
+              status:
+                phase === "interview"
+                  ? "current"
+                  : phase === "review" || phase === "run"
+                    ? "complete"
+                    : "upcoming",
+            },
+            {
+              id: "approve",
+              title: "Approve watch plan",
+              status:
+                phase === "review"
+                  ? "current"
+                  : phase === "run"
+                    ? "complete"
+                    : "upcoming",
+            },
+            {
+              id: "scan",
+              title: "First scan",
+              status: phase === "run" ? "current" : "upcoming",
+            },
+            {
+              id: "watch",
+              title: "Watch room",
+              status: "upcoming",
+            },
+          ]}
+        />
       </header>
 
       {phase === "interview" ? (
@@ -258,98 +317,20 @@ export function TrainWizard({
       {phase === "review" && seed && coverage ? (
         <div className="grid gap-8 lg:grid-cols-2">
           <div className="space-y-6">
-            <section className="card-editorial p-5 space-y-4">
-              <p className="label-arena">Proposed assumptions</p>
-              {seed.worldModelSeed.assumptions.map((assumption, index) => (
-                <div key={assumption.id}>
-                  <Textarea
-                    value={assumption.statement}
-                    onChange={(event) => updateAssumption(index, event.target.value)}
-                    className="font-data text-sm"
-                  />
-                  {assumption.rationale ? (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {assumption.rationale}
-                    </p>
-                  ) : null}
-                </div>
-              ))}
-            </section>
-
-            <section className="card-editorial p-5 space-y-4">
-              <p className="label-arena">Proposed principles</p>
-              {seed.worldviewSeed.principles.map((principle, index) => (
-                <div key={principle.id}>
-                  <Textarea
-                    value={principle.statement}
-                    onChange={(event) => updatePrinciple(index, event.target.value)}
-                    className="font-data text-sm"
-                  />
-                </div>
-              ))}
-            </section>
-
-            <section className="card-editorial p-5 space-y-3">
-              <p className="label-arena">Sources</p>
-              {seed.sourceSeed.sources.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No active sources yet - add competitor or industry URLs before confirming.
-                </p>
-              ) : null}
-              {seed.sourceSeed.sources.map((source) => (
-                <div
-                  key={source.id}
-                  className="flex flex-wrap items-center gap-2 text-sm"
-                >
-                  <Badge variant="watching">{source.kind}</Badge>
-                  <span>{source.label}</span>
-                  <span className="truncate font-data text-xs text-muted-foreground">
-                    {source.url}
-                  </span>
-                </div>
-              ))}
-              {sourceBacklog.length > 0 ? (
-                <div className="space-y-2 border-t border-border pt-3">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Suggested sources to approve
-                  </p>
-                  {sourceBacklog.map((item) => (
-                    <p key={`${item.kind}:${item.detail}`} className="text-xs">
-                      <Badge variant="outline" className="mr-2">
-                        {item.kind}
-                      </Badge>
-                      {item.detail}
-                    </p>
-                  ))}
-                </div>
-              ) : null}
-              {needsSourceApproval ? (
-                <Alert>
-                  <AlertDescription>
-                    Coverage stays partial until you add relevant watch sources.
-                    Bestie will not auto-add generic news feeds.
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-            </section>
-
-            <section className="card-editorial space-y-2 p-5">
-              <Label htmlFor="email">Digest email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={
-                  seed.deliverySeed.destinations.find((item) => item.kind === "email")
-                    ?.target ?? ""
-                }
-                onChange={(event) => updateDigestEmail(event.target.value)}
-              />
-            </section>
+            <WatchPlanReview
+              seed={seed}
+              deployStatus={deployStatus}
+              sourceBacklog={sourceBacklog}
+              needsSourceApproval={needsSourceApproval}
+              onAssumptionChange={updateAssumption}
+              onPrincipleChange={updatePrinciple}
+              onDigestEmailChange={updateDigestEmail}
+            />
 
             <Button
               size="lg"
               onClick={handleSaveAndRun}
-              disabled={saving || running || !hasRelevantActiveSources(seed)}
+              disabled={saving || running || !launchReady}
             >
               {saving || running ? (
                 <>
@@ -363,6 +344,12 @@ export function TrainWizard({
                 </>
               )}
             </Button>
+            {!launchReady ? (
+              <p className="text-sm text-muted-foreground">
+                Complete the launch checklist above before running. You can still
+                edit the plan while connections finish wiring.
+              </p>
+            ) : null}
           </div>
 
           <CoveragePanel

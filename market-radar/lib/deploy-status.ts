@@ -3,11 +3,19 @@ import { readBestieSeed, readMonitorConfig } from "./persistence";
 
 export type ConnectionCheckId = "ai" | "memory" | "schedule" | "email";
 
+export const REQUIRED_CONNECTION_IDS: ConnectionCheckId[] = [
+  "ai",
+  "memory",
+  "schedule",
+];
+
 export type ConnectionCheck = {
   id: ConnectionCheckId;
   label: string;
   connected: boolean;
   detail: string;
+  /** When false, connection is progressive (e.g. email) and does not block briefing. */
+  required?: boolean;
   /** Human-facing hint — vendor names only in advanced drawer */
   hint?: string;
   connectUrl?: string;
@@ -33,6 +41,25 @@ async function memoryReachable(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export function computeDeployReadiness(checks: ConnectionCheck[]) {
+  const requiredChecks = checks.filter((check) => check.required !== false);
+  const infraReady = requiredChecks.every((check) => check.connected);
+  const aiConnected = checks.find((check) => check.id === "ai")?.connected ?? false;
+  const memoryConnected =
+    checks.find((check) => check.id === "memory")?.connected ?? false;
+  const emailReady =
+    checks.find((check) => check.id === "email")?.connected ?? false;
+
+  return {
+    infraReady,
+    /** Enough to start the interview and compile (AI Gateway). */
+    canBrief: aiConnected,
+    /** Enough to persist a confirmed watch plan. */
+    canPersist: aiConnected && memoryConnected,
+    emailReady,
+  };
 }
 
 export async function getDeployStatus() {
@@ -62,11 +89,12 @@ export async function getDeployStatus() {
       id: "ai",
       label: "AI connected",
       connected: aiConnected,
+      required: true,
       detail: aiConnected
         ? hasOidc
           ? "Ready via Vercel AI Gateway"
           : "Ready via API key"
-        : "Bestie needs AI to read and rank signals",
+        : "Bestie needs AI to interview and rank signals",
       hint: "AI Gateway",
       automatic: hasOidc,
       connectUrl: onVercel
@@ -77,6 +105,7 @@ export async function getDeployStatus() {
       id: "memory",
       label: "Memory connected",
       connected: memoryConnected,
+      required: true,
       detail: memoryConnected
         ? "Monitor config and digests persist"
         : "Add database memory so training sticks",
@@ -89,6 +118,7 @@ export async function getDeployStatus() {
       id: "schedule",
       label: "Schedule active",
       connected: scheduleConnected,
+      required: true,
       detail: scheduleConnected
         ? onVercel
           ? "Daily watch at 07:00 UTC"
@@ -100,11 +130,12 @@ export async function getDeployStatus() {
     },
     {
       id: "email",
-      label: "Email delivery configured",
+      label: "Email delivery ready",
       connected: emailConnected,
+      required: false,
       detail: emailConnected
         ? "Digests can reach your inbox"
-        : "Connect email so Bestie can report",
+        : "Optional for now — web digest works without email",
       hint: "Resend",
       connectUrl: onVercel
         ? "https://vercel.com/integrations/resend"
@@ -112,15 +143,16 @@ export async function getDeployStatus() {
     },
   ];
 
-  const infraReady = checks.every((check) => check.connected);
+  const readiness = computeDeployReadiness(checks);
   const trainingComplete = Boolean(
-    seed?.worldModelSeed.assumptions.length || (config?.operatorSummary && config.sources.length),
+    seed?.worldModelSeed.assumptions.length ||
+      (config?.operatorSummary && config.sources.length),
   );
 
   return {
     checks,
     onVercel,
-    infraReady,
+    ...readiness,
     trainingComplete,
     hasDigest: false as boolean,
     configSaved: Boolean(config),

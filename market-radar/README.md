@@ -2,120 +2,114 @@
 
 So you are never the last to know.
 
-Market Radar is a small AI employee that reads public market sources through
-your assumptions and principles, then sends a short digest of what matters.
+Market Radar watches **public sources** through your **watch targets** and
+**escalation rules**, then sends a short **digest** of **signals** that deserve
+**action**.
 
 > Free has world-model thinking. Managed Bestie has world-model memory.
 
-## Choose Your Path
+**Choose your journey:** [hirebestie.com/agents/market-radar](https://hirebestie.com/agents/market-radar)
 
-### 1. Use in Claude or Codex
+---
 
-Use this when you want the agent logic, not infrastructure.
+## 1. Use the brain — Claude / Codex
 
-What you get:
+**Best for:** running Market Radar today with no infrastructure.
 
-- `skills/market-radar/SKILL.md`: self-contained instructions
-- `examples/operator.md`: business, assumptions, principles
-- `examples/sources.yml`: public source template
-- `examples/worked-run.md`: example output
-- `schemas/`: structured output contracts
+**Start here:**
 
-How to use:
+1. Open [`skills/market-radar/SKILL.md`](skills/market-radar/SKILL.md) — self-contained instructions.
+2. Or paste [`examples/minimal.md`](examples/minimal.md) into chat (60-second path).
+3. For a reusable plan, copy [`examples/operator.md`](examples/operator.md) and [`examples/sources.yml`](examples/sources.yml).
 
-1. Copy `skills/market-radar/SKILL.md` into your AI tool as project
-   instructions.
-2. Fill `examples/operator.md` with your business context.
-3. Fill `examples/sources.yml` with public sources.
-4. Ask: "Run Market Radar for today and produce the digest."
+**Copy-paste prompt** (also inside `SKILL.md`):
 
-No Neon, no Vercel, no Resend. This is the manual free path.
+```text
+You are my Market Radar Bestie. Run the market-radar skill.
+Interview me if needed, compile watch targets + escalation rules + sources,
+then run today's radar and write brief-YYYY-MM-DD.md.
+```
 
-### 2. Deploy Your Own
+**Install today:**
 
-Use this when you want a self-hosted web app with durable memory.
+```bash
+git clone https://github.com/hirebestie/agents
+# Open: market-radar/skills/market-radar/SKILL.md
+```
+
+**Coming soon:** `npx skills install` / skills.sh one-click. Not live yet — use git clone.
+
+**Skill cannot:** remember tomorrow, run on a schedule, send email, or persist graph memory. See "Honest boundaries" in `SKILL.md`.
+
+---
+
+## 2. Own the app — Deploy to Vercel
+
+**Best for:** web app, durable memory, daily cron, web digest (email optional).
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fhirebestie%2Fagents&project-name=market-radar-bestie&root-directory=market-radar)
 
-The deployed app uses:
+**Live demo:** [market-radar-bestie.vercel.app](https://market-radar-bestie.vercel.app)
 
-- Vercel AI Gateway for model access
-- Neon Postgres for durable monitor memory
-- Vercel Cron for scheduled checks
-- Resend for email digests
+After deploy:
 
-Required production setup:
+1. Connect AI, memory, schedule (email optional).
+2. **Brief Bestie** — tool-loop interview.
+3. Approve watch plan → first scan → Digest / Watch room.
 
-1. Add Neon Postgres and set `POSTGRES_URL`.
-2. Enable Vercel AI Gateway or set `AI_GATEWAY_API_KEY`.
-3. Set `MARKET_RADAR_RUN_TOKEN`.
-4. Set `CRON_SECRET`.
-5. Optional: set `RESEND_API_KEY` and `MARKET_RADAR_FROM_EMAIL`.
+Uses Vercel AI Gateway, Neon Postgres, Vercel Cron, optional Resend.  
+Bun: `bun install --frozen-lockfile && bun run build`. See `DEPENDENCY-RATIONALE.md`.
 
-Vercel installs with **Bun** (`bun install --frozen-lockfile`) and builds with
-`bun run build`. Local dev: `bun install && bun run dev`. See
-`DEPENDENCY-RATIONALE.md` for why shadcn primitives are vendored and why there
-are no `@repo/*` imports.
+Source adapters: `rss`, `website`, `sitemap`.
 
-Source adapters available now:
+---
 
-- `rss`
-- `website`
-- `sitemap`
+## 3. Hire the employee — Managed Bestie
 
-Unsupported source types become backlog requests instead of pretending to work.
+**Best for:** graph memory, channels, governance, operator support.
 
-### 3. Hire Managed Bestie
+[Hire managed Market Radar](https://hirebestie.com/deploy?agent=market-radar&utm_source=agents_readme&utm_medium=managed_cta&utm_campaign=market_radar)
 
-Use this when you want us to run the employee for you.
+Managed adds: persistent graph, scheduled watches, Slack/Telegram/WhatsApp,
+action receipts, source expansion. Import your self-host seed — no cold start.
 
-Managed Bestie adds:
+---
 
-- governed assumptions and principles
-- graph memory
-- source expansion
-- Slack, Telegram, WhatsApp, and email setup
-- action receipts
-- Brief, Investigate, Simulate, and Snooze loops
+## What's in this repo
 
-[Hire managed Market Radar](https://hirebestie.com/deploy?agent=market-radar&utm_source=ep03&utm_medium=deploy_readme&utm_campaign=market_radar_deploy)
+| Path | Purpose |
+|---|---|
+| `skills/market-radar/SKILL.md` | Agent brain — start here for Claude/Codex |
+| `examples/minimal.md` | Shortest copy-paste path |
+| `examples/operator.md` | Watch plan template |
+| `examples/sources.yml` | Public sources template |
+| `examples/worked-run.md` | Illustrative digest |
+| `schemas/*.json` | Structured output contracts |
+| `skills/market-radar/rules/relevance-rubric.md` | Keep/drop tuning |
 
-## What Is An Assumption?
+---
 
-An assumption is a future-facing, falsifiable belief that would change a
-decision if it moved.
+## Vocabulary (30 seconds)
 
-Good:
+| Term | Meaning |
+|---|---|
+| Watch target | Falsifiable belief that would change a decision |
+| Escalation rule | When to interrupt vs. quiet brief |
+| Source | Named public URL or feed |
+| Signal | One observation that touches a watch target |
+| Digest | Escalations + morning brief + dropped count |
+| Action | brief, investigate, simulate, snooze, ignore |
 
-- "A regional competitor will open within 20 miles before Q4."
-- "Financing terms will matter more than headline price this quarter."
+---
 
-Weak:
+## Honest boundaries
 
-- "The market is competitive."
-- "Customers care about quality."
+- Public sources only — no login-walled scraping.
+- Every keeper traces to a real URL — no fabrication.
+- Skill runs are ephemeral — no memory between sessions unless you use files.
+- Deployed app: web digest works without email; email is progressive setup.
+- Flags and recommends — does not act on your behalf.
 
-## What Is A Principle?
+---
 
-A principle is a decision rule. It tells Bestie how to decide what matters.
-
-Good:
-
-- "Act on confirmed local competitor moves within 48 hours."
-- "Do not escalate national news unless it changes local demand or pricing."
-
-Weak:
-
-- "Be smart."
-- "Watch competitors."
-
-## Honest Boundaries
-
-- Public sources only.
-- No login-walled scraping.
-- Every keeper must trace to a real URL.
-- The self-host app sends email first; Slack, Telegram, and WhatsApp are managed
-  or later adapters.
-- The free skill does not remember prior runs.
-
-Generated from `monorepo/packages/agent-templates`.
+Generated from `monorepo/packages/agent-templates`. Storefront: [hirebestie.com/agents/market-radar](https://hirebestie.com/agents/market-radar).

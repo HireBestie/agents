@@ -174,6 +174,7 @@ export function MarketRadarApp() {
             <TabsContent value="train">
               <TrainWizard
                 initialSeed={bestieSeed}
+                deployStatus={status}
                 onComplete={() => {
                   void refreshWatch();
                   void refreshStatus();

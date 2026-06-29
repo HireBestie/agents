@@ -30,6 +30,7 @@ export type ConnectionCheck = {
   label: string;
   connected: boolean;
   detail: string;
+  required?: boolean;
   hint?: string;
   connectUrl?: string;
   automatic?: boolean;
@@ -39,6 +40,9 @@ export type DeployStatus = {
   checks: ConnectionCheck[];
   onVercel: boolean;
   infraReady: boolean;
+  canBrief: boolean;
+  canPersist: boolean;
+  emailReady: boolean;
   trainingComplete: boolean;
   hasDigest: boolean;
   configSaved: boolean;

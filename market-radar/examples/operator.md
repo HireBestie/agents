@@ -9,28 +9,29 @@ Regional HVAC installer serving residential retrofit customers in the US
 Midwest. Competes against two regional chains on installed price, financing
 terms, response time, and trust.
 
-## Assumptions
+## Watch targets
 
-Assumptions are future-facing, falsifiable beliefs that would change a decision
-if they moved.
+Watch targets are future-facing, falsifiable beliefs that would change a decision
+if they moved. (Same idea as "assumptions" in the deployed app.)
 
 - Financing terms decide our quote win rate this quarter.
 - A local competitor opening nearby would pressure our service territory.
 - Copper input costs stay flat through Q3.
 - New rebate or efficiency rules could shift customer demand before winter.
 
-## Principles
+## Escalation rules
 
-Principles are decision rules. They tell Bestie how to decide what matters.
+Escalation rules are decision rules. They tell Bestie when to interrupt you vs.
+put something in the quiet morning brief. (Same idea as "principles" in the app.)
 
 - Act on confirmed local competitor moves within 48 hours.
 - Compete on total cost of ownership, not sticker price.
 - Do not escalate national news without a local mechanism.
 - Prioritize margin risk over vanity growth signals.
 
-## Escalation Policy
+## Escalation policy
 
-Escalate when an item creates a credible threat, opportunity, or mixed signal
-against one of the assumptions above. Put lower-certainty or context-only items
-in the morning brief.
+Escalate when a **signal** creates a credible threat, opportunity, or mixed read
+against a watch target. Put lower-certainty or context-only items in the morning
+brief. Everything else is dropped or marked `watch_only`.
 
